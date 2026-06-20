@@ -1,0 +1,138 @@
+groups:
+  clean:
+    tasks:
+      tmp:
+        help: Clean unnecessary temporary files
+        backend: bash
+        run: |
+          rm -fr build/
+          rm -fr dist/
+          rm -fr .eggs/
+          rm -f .coverage
+          rm -fr htmlcov/
+          rm -fr .pytest_cache
+          rm -fr .mypy_cache
+          rm -fr .ruff_cache
+          find . -name '*.egg-info' -exec rm -fr {} +
+          find . -name '*.egg' -exec rm -f {} +
+          find . -name '*.pyc' -exec rm -f {} +
+          find . -name '__pycache__' -exec rm -fr {} +
+          find . -name '*.pyo' -exec rm -f {} +
+          find . -name '*~' -exec rm -f {} +
+
+  docs:
+    tasks:
+      render:
+        help: Render documentation
+        backend: bash
+        env-file: .env
+        hooks:
+          pre-run:
+            - task: tests.ensure-env
+          post-run:
+            - task: docs.build
+        run: |
+          if [ -f docs/example.qmd ]; then
+            QUARTO_PYTHON=$(which python) quarto render docs/example.qmd \
+              --to md \
+              --output example.md \
+              --output-dir docs/ \
+              --no-execute-daemon
+          else
+            echo "docs/example.qmd not found; skipping docs render."
+          fi
+
+      build:
+        help: Build documentation
+        backend: bash
+        run: |
+          if [ -f mkdocs.yaml ]; then
+            mkdocs build --config-file mkdocs.yaml
+          else
+            echo "mkdocs.yaml not found; skipping docs build."
+          fi
+
+      preview:
+        help: Preview documentation page locally
+        hooks:
+          pre-run:
+            - task: docs.build
+        run: |
+          if [ -f mkdocs.yaml ]; then
+            mkdocs serve --watch docs --config-file mkdocs.yaml
+          else
+            echo "mkdocs.yaml not found; skipping docs preview."
+          fi
+
+  tests:
+    tasks:
+      ensure-env:
+        help: Ensure the dotenv file
+        backend: bash
+        run: touch .env
+
+      linter:
+        help: Run linter tools
+        run: |
+          pre-commit install
+          pre-commit run --all-files --verbose
+
+      unit:
+        help: run tests
+        args:
+          path:
+            help: Specify the location of the tests
+            type: string
+            default: ""
+          params:
+            help: Specify parameters to be used for tests
+            type: string
+            default: "-vv"
+        backend: bash
+        run: |
+          if [ -d tests ] && find tests -type f -name 'test*.py' | grep -q .; then
+            pytest \
+              --cov=hphbiome \
+              --cov-fail-under=92 \
+              --cov-report term-missing \
+              --no-cov-on-fail ${{ args.path }} ${{ args.params }}
+          else
+            echo "No tests found; skipping unit tests."
+          fi
+
+      ci:
+        help: run the sames tests executed on CI
+        hooks:
+          pre-run:
+            - task: tests.unit
+            - task: tests.linter
+
+  package:
+    tasks:
+      build:
+        help: "Build the package"
+        run: |
+          python -m build
+
+  release:
+    vars:
+      app: |
+        env npm_config_ignore_scripts=true npx --yes \
+        -p semantic-release \
+        -p "@semantic-release/commit-analyzer" \
+        -p "@semantic-release/release-notes-generator" \
+        -p "@semantic-release/changelog" \
+        -p "@semantic-release/exec" \
+        -p "@semantic-release/github" \
+        -p "@semantic-release/git" \
+        -p "@google/semantic-release-replace-plugin" \
+        semantic-release
+
+    tasks:
+      ci:
+        help: run semantic release on CI
+        run: ${{ vars.app }} --ci
+
+      dry:
+        help: run semantic release in dry-run mode
+        run: ${{ vars.app }} --dry-run

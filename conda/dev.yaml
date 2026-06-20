@@ -1,0 +1,11 @@
+name: hphbiome
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python >=3.10,<=3.13
+  - pip
+  - nodejs # used by semantic-release
+  - uv
+  - compilers # conda-forge meta-package: selects the right C/C++ toolchain per platform

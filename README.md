@@ -1,1 +1,3 @@
-# hph-biome skill
+# hphbiome
+
+Infrastructure for the `hphbiome` Python package.
